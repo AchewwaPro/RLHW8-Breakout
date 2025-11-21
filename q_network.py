@@ -28,7 +28,7 @@ class QNetwork(nn.Module):
 
 class CNN(nn.Module):
     def __init__(self, action_dim, lr):
-        super().__init__()
+        super(CNN, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(4, 32, kernel_size=8, stride=4),
@@ -43,7 +43,9 @@ class CNN(nn.Module):
             nn.ReLU(),
             nn.Linear(512, action_dim)
         )
-
+        for m in self.modules():
+            if isinstance(m, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(m.weight)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
 
     def inference(self, obs):
@@ -57,4 +59,5 @@ class CNN(nn.Module):
     def train(self, loss):
         self.optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
         self.optimizer.step()

@@ -39,7 +39,7 @@ class BreakoutEnv(Env):
         obs = np.mean(obs, axis = 2) # 灰度图
         obs = obs[35:195] # 裁剪中间区域
         obs = obs[::2, ::2] # 下采样
-        obs = obs.astype(np.float32) / 256
+        obs = obs.astype(np.float32) / 255
         obs = obs[np.newaxis, :, :]
         return obs
     
@@ -111,8 +111,8 @@ class BreakoutStackEnv(Env):
         if real_done:
             pass
         elif life_lost:
-            self.stack = deque([obs] * self.stack_size, maxlen=self.stack_size)
-
+            # self.stack = deque([obs] * self.stack_size, maxlen=self.stack_size)
+            pass
         # reward = np.sign(reward).astype(np.float32)
         return np.stack(self.stack, axis=0), reward, real_done, agent_done, info
     

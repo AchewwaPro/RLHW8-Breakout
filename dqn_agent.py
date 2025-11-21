@@ -16,13 +16,15 @@ class DQNAgent(Agent):
         self.eps_lower = conf.get('eps_lower', 0.1)
         self.eps_upper = conf.get('eps_upper', 1)
         self.eps_decay_freq = conf.get('eps_decay_freq', 200)
-        self.epsilon = self.eps_upper
+        self.eps = self.eps_upper
         # 累计回报的衰减系数
         self.gamma = conf.get('gamma', 0.95)
         # 设备信息，如'cpu', 'cuda:0'等
         self.device = conf.get('device', 'cpu')
         self.target_update_freq = conf.get('target_update_freq', 100)
         self.learn_step = 0
+        self.global_step = 0
+        self.random_step = conf.get('random_step', 10000)
 
     def epsilon_decay(self, total_step):
         self.eps = self.eps_lower + (self.eps_upper - self.eps_lower) * math.exp(-total_step / self.eps_decay_freq)
@@ -37,7 +39,7 @@ class DQNAgent(Agent):
     # 输入单帧状态，采样探索性动作
     def predict(self, obs: 'Frame | np.ndarray | dict'):
         obs = Frame.convert(obs)
-        if np.random.random() < self.epsilon:
+        if np.random.random() < self.eps or self.learn_step < self.random_step:
             # 以 ε 的概率随机选择动作
             action = np.random.randint(0, self.action_dim)
         else:
@@ -45,15 +47,19 @@ class DQNAgent(Agent):
             obs = obs.to_torch(device = self.device)
             q_value = self.model.inference(obs)
             action = int(q_value.argmax())
+
+        self.epsilon_decay(self.global_step)
+            
         return action
     
     # 输入单帧状态，计算最优动作
     def exploit(self, obs: 'Frame | np.ndarray | dict'):
         # 直接选择Q值最大的动作
-        obs = Frame.convert(obs)
-        obs = obs.to_torch(device = self.device)
-        q_value = self.model.inference(obs)
-        action = int(q_value.argmax())
+        with torch.no_grad():
+            obs = Frame.convert(obs)
+            obs = obs.to_torch(device = self.device)
+            q_value = self.model.inference(obs)
+            action = int(q_value.argmax())
         return action
     
     # 输入样本Batch，训练模型
@@ -75,15 +81,13 @@ class DQNAgent(Agent):
             # Q函数更新目标
             q_target = samples.reward + self.gamma * (1 - samples.done) * next_q_value_target
         
-        loss = F.smooth_l1_loss(q_value, q_target)
+        loss = ((q_value - q_target) ** 2).mean()
         # 模型更新
         self.model.train(loss)
 
         self.learn_step += 1
         if self.learn_step % self.target_update_freq == 0:
             self.target_model.load_state_dict(self.model.state_dict())
-        
-        self.epsilon_decay(self.learn_step)
 
     
     def sample_process(self, samples: SampleBatchNumpy):
